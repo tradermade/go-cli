@@ -1,0 +1,6 @@
+tradermade
+tradermade.exe
+dist/
+*.ndjson
+.env
+.vscode/
