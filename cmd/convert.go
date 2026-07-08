@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tradermade/tradermade-cli/internal/output"
+	"github.com/tradermade/go-cli/internal/output"
 )
 
 var convertCmd = &cobra.Command{

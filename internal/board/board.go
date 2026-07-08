@@ -17,9 +17,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/tradermade/tradermade-cli/internal/api"
-	"github.com/tradermade/tradermade-cli/internal/dates"
-	"github.com/tradermade/tradermade-cli/internal/stream"
+	"github.com/tradermade/go-cli/internal/api"
+	"github.com/tradermade/go-cli/internal/dates"
+	"github.com/tradermade/go-cli/internal/stream"
 )
 
 // flashDuration is how long a row highlights after a tick.

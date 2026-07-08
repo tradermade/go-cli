@@ -9,15 +9,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tradermade/tradermade-cli/internal/api"
-	"github.com/tradermade/tradermade-cli/internal/output"
+	"github.com/tradermade/go-cli/internal/api"
+	"github.com/tradermade/go-cli/internal/output"
 )
 
 // Build metadata, stamped at release time via:
 //
-//	go build -ldflags "-X github.com/tradermade/tradermade-cli/cmd.Version=v1.2.3 \
-//	                   -X github.com/tradermade/tradermade-cli/cmd.Commit=abc1234 \
-//	                   -X github.com/tradermade/tradermade-cli/cmd.Date=2026-07-07"
+//	go build -ldflags "-X github.com/tradermade/go-cli/cmd.Version=v1.2.3 \
+//	                   -X github.com/tradermade/go-cli/cmd.Commit=abc1234 \
+//	                   -X github.com/tradermade/go-cli/cmd.Date=2026-07-07"
 var (
 	Version = "0.1.0-dev"
 	Commit  = ""

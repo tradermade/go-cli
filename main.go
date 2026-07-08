@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/tradermade/tradermade-cli/cmd"
+	"github.com/tradermade/go-cli/cmd"
 )
 
 func main() {

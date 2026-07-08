@@ -3,9 +3,9 @@ package cmd
 import (
 	"strings"
 
-	"github.com/tradermade/tradermade-cli/internal/api"
-	"github.com/tradermade/tradermade-cli/internal/config"
-	"github.com/tradermade/tradermade-cli/internal/output"
+	"github.com/tradermade/go-cli/internal/api"
+	"github.com/tradermade/go-cli/internal/config"
+	"github.com/tradermade/go-cli/internal/output"
 )
 
 // restClient parses the --output flag and resolves the REST key.

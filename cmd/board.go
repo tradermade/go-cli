@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tradermade/tradermade-cli/internal/board"
-	"github.com/tradermade/tradermade-cli/internal/config"
-	"github.com/tradermade/tradermade-cli/internal/watchlist"
+	"github.com/tradermade/go-cli/internal/board"
+	"github.com/tradermade/go-cli/internal/config"
+	"github.com/tradermade/go-cli/internal/watchlist"
 )
 
 var boardSort string

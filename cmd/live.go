@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tradermade/tradermade-cli/internal/config"
-	"github.com/tradermade/tradermade-cli/internal/output"
-	"github.com/tradermade/tradermade-cli/internal/stream"
+	"github.com/tradermade/go-cli/internal/config"
+	"github.com/tradermade/go-cli/internal/output"
+	"github.com/tradermade/go-cli/internal/stream"
 )
 
 var liveCmd = &cobra.Command{

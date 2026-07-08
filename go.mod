@@ -1,4 +1,4 @@
-module github.com/tradermade/tradermade-cli
+module github.com/tradermade/go-cli
 
 go 1.24.0
 

@@ -1,6 +1,6 @@
 # Works with GNU make on Linux/macOS and via Git Bash on Windows.
 BINARY  := tradermade
-MODULE  := github.com/tradermade/tradermade-cli
+MODULE  := github.com/tradermade/go-cli
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.1.0-dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%d)

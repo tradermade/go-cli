@@ -1,4 +1,4 @@
-# tradermade-cli
+# TraderMade CLI
 
 Command line client for the [TraderMade](https://tradermade.com) market data
 API. Live quotes, historical candles, currency conversion, and WebSocket
@@ -18,7 +18,7 @@ as of Wed, 08 Jul 2026 10:29:11 GMT
 Grab a binary from [Releases](../../releases), or with Go installed:
 
 ```bash
-go install github.com/tradermade/tradermade-cli@latest
+go install github.com/tradermade/go-cli@latest
 ```
 
 To build from source: `git clone`, then `make build` (or plain
