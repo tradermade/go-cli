@@ -91,14 +91,23 @@ type LiveResponse struct {
 }
 
 // Live fetches real-time quotes for one or more symbols (e.g. EURUSD, XAUUSD, BTCUSD).
-func (c *Client) Live(ctx context.Context, symbols []string) (*LiveResponse, error) {
+func liveParams(symbols []string) url.Values {
 	params := url.Values{}
 	params.Set("currency", strings.Join(symbols, ","))
+	return params
+}
+
+func (c *Client) Live(ctx context.Context, symbols []string) (*LiveResponse, error) {
 	var out LiveResponse
-	if err := c.get(ctx, "/live", params, &out); err != nil {
+	if err := c.get(ctx, "/live", liveParams(symbols), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// LiveRaw returns the /live response body exactly as sent by the server.
+func (c *Client) LiveRaw(ctx context.Context, symbols []string) ([]byte, error) {
+	return c.getBody(ctx, "/live", liveParams(symbols))
 }
 
 // ConvertResponse is the /convert endpoint payload.
@@ -112,26 +121,47 @@ type ConvertResponse struct {
 }
 
 // Convert converts an amount from one currency to another at the live rate.
-func (c *Client) Convert(ctx context.Context, from, to string, amount float64) (*ConvertResponse, error) {
+func convertParams(from, to string, amount float64) url.Values {
 	params := url.Values{}
 	params.Set("from", from)
 	params.Set("to", to)
 	params.Set("amount", strconv.FormatFloat(amount, 'f', -1, 64))
+	return params
+}
+
+func (c *Client) Convert(ctx context.Context, from, to string, amount float64) (*ConvertResponse, error) {
 	var out ConvertResponse
-	if err := c.get(ctx, "/convert", params, &out); err != nil {
+	if err := c.get(ctx, "/convert", convertParams(from, to, amount), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
+// ConvertRaw returns the /convert response body exactly as sent by the server.
+func (c *Client) ConvertRaw(ctx context.Context, from, to string, amount float64) ([]byte, error) {
+	return c.getBody(ctx, "/convert", convertParams(from, to, amount))
+}
+
 // get performs a GET request against the API and decodes the JSON response.
 func (c *Client) get(ctx context.Context, path string, params url.Values, out any) error {
+	body, err := c.getBody(ctx, path, params)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("cannot parse API response: %w", err)
+	}
+	return nil
+}
+
+// getBody performs a GET request and returns the raw response body.
+func (c *Client) getBody(ctx context.Context, path string, params url.Values) ([]byte, error) {
 	params.Set("api_key", c.APIKey)
 	reqURL := c.BaseURL + path + "?" + params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", UserAgent)
@@ -146,18 +176,18 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(time.Duration(attempt+1) * 300 * time.Millisecond):
 		}
 	}
 	if err != nil {
-		return fmt.Errorf("network error calling TraderMade API: %w", err)
+		return nil, fmt.Errorf("network error calling TraderMade API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("cannot read API response: %w", err)
+		return nil, fmt.Errorf("cannot read API response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -180,11 +210,8 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 			strings.HasPrefix(strings.ToLower(c.APIKey), "ws") {
 			msg += `` + "\nnote: your key starts with \"ws\" - that is usually a WebSocket streaming key; REST endpoints (quote, convert, historical...) need a REST API key"
 		}
-		return &APIError{StatusCode: resp.StatusCode, Message: msg}
+		return nil, &APIError{StatusCode: resp.StatusCode, Message: msg}
 	}
 
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("cannot parse API response: %w", err)
-	}
-	return nil
+	return body, nil
 }

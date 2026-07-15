@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseFormat(t *testing.T) {
-	for _, ok := range []string{"table", "json", "csv"} {
+	for _, ok := range []string{"table", "json", "csv", "raw"} {
 		if _, err := ParseFormat(ok); err != nil {
 			t.Errorf("ParseFormat(%q): %v", ok, err)
 		}

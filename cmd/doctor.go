@@ -23,8 +23,9 @@ type check struct {
 }
 
 var doctorCmd = &cobra.Command{
-	Use:   "doctor",
-	Short: "Diagnose key, plan, and connectivity in one shot",
+	Use:     "doctor",
+	Short:   "Connectivity check (REST /live; WebSocket /feedAdv)",
+	GroupID: "combined",
 	Long: `Runs four independent checks and reports each:
 
   key      is an API key configured, and where does it come from
@@ -34,11 +35,19 @@ var doctorCmd = &cobra.Command{
 
 Exit code is 0 when everything passes, 1 otherwise - usable as a CI smoke
 test. Support can ask customers to paste the output of
-"tradermade doctor --output json".`,
+"tradermade doctor --output json".
+
+Probe construction:
+  REST /api/v1/live  currency=EURUSD; api_key is the configured REST key.
+  WebSocket /feedAdv login action with key and fmt=JSON; no market-data
+                      subscription is required for the capability check.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		format, err := outputFormat()
 		if err != nil {
 			return err
+		}
+		if format != output.Table && format != output.JSON {
+			return fmt.Errorf("doctor uses table by default and only accepts --output json")
 		}
 		ctx := cmd.Context()
 		var checks []check

@@ -10,58 +10,52 @@ import (
 )
 
 var (
-	setKeyRest bool
-	setKeyWS   bool
+	setKeyRest string
+	setKeyWS   string
 )
 
 var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage the saved API keys and config file",
+	Use:     "config",
+	Short:   "Manage the saved API keys and config file",
+	GroupID: "local",
 }
 
 var configSetKeyCmd = &cobra.Command{
-	Use:   "set-key KEY",
-	Short: "Save a TraderMade API key",
-	Long: `Save a TraderMade API key.
-
-Some plans issue separately-scoped keys: one for REST, one for WebSocket
-streaming. Save each with its flag:
+	Use:   "set-key --rest KEY | --ws KEY",
+	Short: "Save your TraderMade API keys",
+	Long: `Save your TraderMade API keys: --rest for the REST key, --ws for the
+WebSocket streaming key. One at a time or both together:
 
   tradermade config set-key --rest YOUR_REST_KEY
   tradermade config set-key --ws   YOUR_WS_KEY
+  tradermade config set-key --rest YOUR_REST_KEY --ws YOUR_WS_KEY
 
-If one key covers both APIs, save it without flags and every command uses it.
-
-If your key starts with a dash, put -- before it so it is not read as a flag:
-
-  tradermade config set-key --rest -- -YOUR_KEY`,
-	Args: cobra.ExactArgs(1),
+Keys that start with a dash work as-is.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		key := strings.TrimSpace(args[0])
-		if key == "" {
-			return fmt.Errorf("key is empty")
-		}
-		if setKeyRest && setKeyWS {
-			return fmt.Errorf("pass --rest or --ws, not both - run set-key twice for two different keys")
+		rest := strings.TrimSpace(setKeyRest)
+		ws := strings.TrimSpace(setKeyWS)
+		if rest == "" && ws == "" {
+			return fmt.Errorf("nothing to save - pass --rest KEY and/or --ws KEY")
 		}
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
-		var label string
-		switch {
-		case setKeyRest:
-			cfg.RESTKey, label = key, "REST key"
-		case setKeyWS:
-			cfg.WSKey, label = key, "WebSocket key"
-		default:
-			cfg.APIKey, label = key, "API key (used for both REST and WebSocket)"
+		var saved []string
+		if rest != "" {
+			cfg.RESTKey = rest
+			saved = append(saved, "REST key")
+		}
+		if ws != "" {
+			cfg.WSKey = ws
+			saved = append(saved, "WebSocket key")
 		}
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
 		path, _ := config.Path()
-		fmt.Printf("%s saved to %s\n", label, path)
+		fmt.Printf("%s saved to %s\n", strings.Join(saved, " and "), path)
 		return nil
 	},
 }
@@ -98,8 +92,8 @@ var configPathCmd = &cobra.Command{
 }
 
 func init() {
-	configSetKeyCmd.Flags().BoolVar(&setKeyRest, "rest", false, "save as the REST-only key")
-	configSetKeyCmd.Flags().BoolVar(&setKeyWS, "ws", false, "save as the WebSocket-only key")
+	configSetKeyCmd.Flags().StringVar(&setKeyRest, "rest", "", "the REST API key")
+	configSetKeyCmd.Flags().StringVar(&setKeyWS, "ws", "", "the WebSocket streaming key")
 	configCmd.AddCommand(configSetKeyCmd, configShowCmd, configPathCmd)
 	rootCmd.AddCommand(configCmd)
 }

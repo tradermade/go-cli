@@ -112,13 +112,47 @@ func TestTimeseriesMixedNumberEncodings(t *testing.T) {
 		],"request_time":"now"}`))
 	})
 
-	resp, err := c.Timeseries(context.Background(), "EURUSD", "2026-06-01", "2026-07-01", "daily", 0)
+	resp, err := c.Timeseries(context.Background(), "EURUSD", "2026-06-01", "2026-07-01", "daily", 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	q := resp.Quotes[0]
 	if q.Open.String() != "1.1" || q.High.String() != "1.2" || q.Close.String() != "1.15" {
 		t.Errorf("mixed encodings parsed wrong: %+v", q)
+	}
+}
+
+func TestTimeseriesBuildsDocumentedParameters(t *testing.T) {
+	c := newTestClient(t, "k", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		for key, want := range map[string]string{
+			"currency": "BTCUSD", "start_date": "2026-07-01-00:00",
+			"end_date": "2026-07-02-00:00", "interval": "minute",
+			"period": "15", "format": "records", "weekend": "true", "api_key": "k",
+		} {
+			if got := q.Get(key); got != want {
+				t.Errorf("%s = %q, want %q", key, got, want)
+			}
+		}
+		w.Write([]byte(`{"base_currency":"BTC","quote_currency":"USD","endpoint":"timeseries","quotes":[],"request_time":"now"}`))
+	})
+
+	if _, err := c.Timeseries(context.Background(), "BTCUSD", "2026-07-01-00:00", "2026-07-02-00:00", "minute", 15, true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLiveRawPreservesServerJSON(t *testing.T) {
+	want := []byte(`{"endpoint":"live", "new_server_field":42}`)
+	c := newTestClient(t, "k", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(want)
+	})
+	got, err := c.LiveRaw(context.Background(), []string{"EURUSD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("got %q, want exact %q", got, want)
 	}
 }
 

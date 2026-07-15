@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -12,20 +15,52 @@ import (
 	"github.com/tradermade/go-cli/internal/stream"
 )
 
-var liveCmd = &cobra.Command{
-	Use:   "live SYMBOL [SYMBOL...]",
-	Short: "Stream live tick data over WebSocket (Ctrl+C to stop)",
-	Long: `Stream live tick data over WebSocket. Reconnects and resubscribes
-automatically if the connection drops. Press Ctrl+C to stop.
+var (
+	liveLadder   bool
+	liveSendLast bool
+	liveRaw      bool
+	liveSave     string
+)
 
-With --output json each tick is printed as one JSON line (NDJSON),
-ready to pipe into jq or a file.`,
+var liveCmd = &cobra.Command{
+	Use:     "live SYMBOL [SYMBOL...]",
+	Short:   "Live ticks (WebSocket wss://stream.tradermade.com/feedAdv)",
+	GroupID: "websocket",
+	Long: `Stream ticks from wss://stream.tradermade.com/feedAdv (WebSocket v2).
+
+Protocol construction:
+  login.action       Always "login".
+  login.key          Added from the configured WebSocket key.
+  login.fmt          Always "JSON". CSV table/file output is converted locally.
+  login.send_ladder  --ladder adds true; requires trader-ladder plan access.
+  subscribe.action   Always "subscribe" after login_ok.
+  subscribe.symbols  Positional symbols normalized to SYMBOL:QUOTE.
+  subscribe.send_last  --send-last adds true for one cached LAST_QUOTE.
+
+The server supports JSON/CSV/SSV market frames, but control frames are always
+JSON. This CLI requests JSON so reconnect, acknowledgements, ladder data, and
+CSV saving share one parser. --output json prints original market tick frames
+as NDJSON; --output raw also includes greeting and control frames.
+
+The client reconnects with backoff and resubscribes because subscriptions do
+not persist. --save requires a .csv filename and appends on restart. A bare
+filename uses the current working directory; the absolute path is reported
+when the first tick is saved. Press Ctrl+C to stop.`,
 	Example: `  tradermade live EURUSD
   tradermade live EURUSD GBPUSD XAUUSD
+  tradermade live EURUSD --ladder
+  tradermade live EURUSD --output raw
+  tradermade live EURUSD --save ticks.csv
   tradermade live BTCUSD --output json > ticks.ndjson`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
 		format, err := outputFormat()
+		if err != nil {
+			return err
+		}
+		rawOutput, err := rawOutput(cmd, format, liveRaw)
 		if err != nil {
 			return err
 		}
@@ -34,18 +69,67 @@ ready to pipe into jq or a file.`,
 			return err
 		}
 
+		// Open the capture file before connecting, so a bad path fails
+		// instantly instead of after the stream is already up.
+		var csvW *csv.Writer
+		saved := 0
+		var saveErr error
+		if liveSave != "" {
+			liveSave, err = resolveSavePath(liveSave)
+			if err != nil {
+				return err
+			}
+			f, w, needHeader, err := openCSVAppend(liveSave)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			if needHeader {
+				if err := w.Write([]string{"time", "symbol", "bid", "ask", "bid_volume", "ask_volume"}); err != nil {
+					return err
+				}
+				w.Flush()
+				if err := w.Error(); err != nil {
+					return err
+				}
+			}
+			csvW = w
+		}
+
 		// Direction arrows need the previous bid per symbol.
 		lastBid := map[string]float64{}
 		headerPrinted := false
 
 		opts := stream.Options{
-			Key:     key,
-			Symbols: args,
+			Key:        key,
+			Symbols:    args,
+			SendLadder: liveLadder,
+			SendLast:   liveSendLast,
 			// Lifecycle messages go to stderr so stdout stays clean for piping.
 			Logf: func(f string, a ...any) {
 				fmt.Fprintf(os.Stderr, f+"\n", a...)
 			},
 			OnTick: func(t stream.Tick, raw []byte) {
+				if csvW != nil && saveErr == nil {
+					if err := csvW.Write([]string{t.Timestamp, t.Symbol, t.Bid, t.Ask, t.BidVolume, t.AskVolume}); err != nil {
+						saveErr = fmt.Errorf("cannot save CSV to %s: %w", liveSave, err)
+						cancel()
+						return
+					}
+					csvW.Flush()
+					if err := csvW.Error(); err != nil {
+						saveErr = fmt.Errorf("cannot save CSV to %s: %w", liveSave, err)
+						cancel()
+						return
+					}
+					saved++
+					if saved == 1 {
+						fmt.Fprintf(os.Stderr, "saving CSV to %s\n", liveSave)
+					}
+				}
+				if rawOutput {
+					return // display is handled frame-by-frame via OnRaw
+				}
 				switch format {
 				case output.JSON:
 					fmt.Println(string(raw))
@@ -59,8 +143,9 @@ ready to pipe into jq or a file.`,
 						t.Timestamp, t.Symbol, t.Bid, t.Ask, t.BidVolume, t.AskVolume)
 					return
 				}
+
 				if !headerPrinted {
-					fmt.Printf("%-22s %-10s %14s %14s\n", "TIME", "SYMBOL", "BID", "ASK")
+					fmt.Printf("%-22s %-10s %14s %14s %10s %10s\n", "TIME", "SYMBOL", "BID", "ASK", "BID-VOL", "ASK-VOL")
 					headerPrinted = true
 				}
 				dir := " "
@@ -75,18 +160,86 @@ ready to pipe into jq or a file.`,
 					}
 					lastBid[t.Symbol] = bid
 				}
-				fmt.Printf("%-22s %-10s %14s %14s %s\n", t.Timestamp, t.Symbol, t.Bid, t.Ask, dir)
+				bid, ask := t.Bid, t.Ask
+				if t.Ladder != nil {
+					// Ladder frames carry prices as floats and can arrive with
+					// artifacts like 1.1425399999999999 - shorten for display.
+					bid, ask = shortNum(bid), shortNum(ask)
+				}
+				bv, av := t.BidVolume, t.AskVolume
+				if bv == "" {
+					bv = "-" // LAST_QUOTE messages carry no volumes
+				}
+				if av == "" {
+					av = "-"
+				}
+				fmt.Printf("%-22s %-10s %14s %14s %10s %10s %s\n",
+					t.Timestamp, t.Symbol, bid, ask, bv, av, dir)
+				if t.Ladder != nil {
+					fmt.Printf("%22s %-8s %s\n", "", "  bids", ladderLevels(t.Ladder.Bids))
+					fmt.Printf("%22s %-8s %s\n", "", "  asks", ladderLevels(t.Ladder.Asks))
+				}
 			},
 		}
 
-		if err := stream.Run(cmd.Context(), opts); err != nil {
+		if rawOutput {
+			// Every frame exactly as received - control messages included.
+			opts.OnRaw = func(raw []byte) {
+				fmt.Println(string(raw))
+			}
+		}
+
+		if err := stream.Run(ctx, opts); err != nil {
 			return err
+		}
+		if saveErr != nil {
+			return saveErr
+		}
+		if liveSave != "" {
+			fmt.Fprintf(os.Stderr, "saved %d ticks to %s\n", saved, liveSave)
 		}
 		fmt.Fprintln(os.Stderr, "stopped")
 		return nil
 	},
 }
 
+// ladderLevels renders up to five depth levels as "price x volume" pairs.
+func ladderLevels(levels [][]string) string {
+	const max = 5
+	parts := make([]string, 0, max)
+	for i, l := range levels {
+		if i == max {
+			break
+		}
+		if len(l) >= 2 {
+			parts = append(parts, l[0]+" x "+l[1])
+		}
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, "   ")
+}
+
+// shortNum rewrites a numeric string in its shortest round-trip form,
+// removing float artifacts (1.1425399999999999 -> 1.14254).
+func shortNum(s string) string {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return s
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
 func init() {
+	liveCmd.Flags().BoolVar(&liveLadder, "ladder", false,
+		"request market depth (trader ladder plans only)")
+	liveCmd.Flags().BoolVar(&liveSendLast, "send-last", false,
+		"receive the cached last tick immediately on subscribe")
+	liveCmd.Flags().BoolVar(&liveRaw, "raw", false,
+		"deprecated alias for --output raw")
+	_ = liveCmd.Flags().MarkDeprecated("raw", "use --output raw instead")
+	liveCmd.Flags().StringVar(&liveSave, "save", "",
+		"append CSV to a .csv filename")
 	rootCmd.AddCommand(liveCmd)
 }

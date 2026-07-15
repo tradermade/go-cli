@@ -1,6 +1,33 @@
+# Build output
 tradermade
 tradermade.exe
 dist/
+
+# Go test, cache, coverage, and profiling artifacts
+.gocache/
+*.test
+coverage.out
+coverage.html
+*.prof
+
+# Temporary local builds
+.tmp-*
+*.tmp
+
+# Market-data exports and logs
+*.csv
 *.ndjson
+*.ssv
+*.log
+
+# Local configuration and secrets
 .env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.agents/
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db

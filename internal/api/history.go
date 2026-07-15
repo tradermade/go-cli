@@ -37,17 +37,27 @@ type HistoricalResponse struct {
 	RequestTime string            `json:"request_time"`
 }
 
-// Historical fetches daily OHLC for one or more symbols on a given day
-// (date format 2006-01-02).
-func (c *Client) Historical(ctx context.Context, symbols []string, date string) (*HistoricalResponse, error) {
+func historicalParams(symbols []string, date string) url.Values {
 	params := url.Values{}
 	params.Set("currency", strings.Join(symbols, ","))
 	params.Set("date", date)
+	return params
+}
+
+// Historical fetches daily OHLC for one or more symbols on a given day
+// (date format 2006-01-02).
+func (c *Client) Historical(ctx context.Context, symbols []string, date string) (*HistoricalResponse, error) {
 	var out HistoricalResponse
-	if err := c.get(ctx, "/historical", params, &out); err != nil {
+	if err := c.get(ctx, "/historical", historicalParams(symbols, date), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// HistoricalRaw returns the /historical response body exactly as the server
+// sent it, unparsed.
+func (c *Client) HistoricalRaw(ctx context.Context, symbols []string, date string) ([]byte, error) {
+	return c.getBody(ctx, "/historical", historicalParams(symbols, date))
 }
 
 // TimeseriesQuote is one candle in a /timeseries range.
@@ -65,23 +75,37 @@ type TimeseriesResponse struct {
 	RequestTime   string            `json:"request_time"`
 }
 
-// Timeseries fetches a candle range. interval is daily, hourly, or minute;
-// period is the interval multiplier (e.g. hourly period 4 = 4-hour candles).
-// Dates are 2006-01-02 for daily and 2006-01-02-15:04 for intraday.
-func (c *Client) Timeseries(ctx context.Context, symbol, start, end, interval string, period int) (*TimeseriesResponse, error) {
+func timeseriesParams(symbol, start, end, interval string, period int, weekend bool) url.Values {
 	params := url.Values{}
 	params.Set("currency", symbol)
 	params.Set("start_date", start)
 	params.Set("end_date", end)
 	params.Set("interval", interval)
+	params.Set("format", "records")
 	if period > 0 {
 		params.Set("period", strconv.Itoa(period))
 	}
+	if weekend {
+		params.Set("weekend", "true")
+	}
+	return params
+}
+
+// Timeseries fetches a candle range. interval is daily, hourly, or minute;
+// period is the interval multiplier (e.g. hourly period 4 = 4-hour candles).
+// Dates are 2006-01-02 for daily and 2006-01-02-15:04 for intraday.
+func (c *Client) Timeseries(ctx context.Context, symbol, start, end, interval string, period int, weekend bool) (*TimeseriesResponse, error) {
 	var out TimeseriesResponse
-	if err := c.get(ctx, "/timeseries", params, &out); err != nil {
+	if err := c.get(ctx, "/timeseries", timeseriesParams(symbol, start, end, interval, period, weekend), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// TimeseriesRaw returns the /timeseries response body exactly as the server
+// sent it, unparsed.
+func (c *Client) TimeseriesRaw(ctx context.Context, symbol, start, end, interval string, period int, weekend bool) ([]byte, error) {
+	return c.getBody(ctx, "/timeseries", timeseriesParams(symbol, start, end, interval, period, weekend))
 }
 
 // CandleResponse is the /minute_historical and /hour_historical payload -
@@ -102,6 +126,18 @@ func (c *Client) MinuteHistorical(ctx context.Context, symbol, dateTime string) 
 // HourHistorical fetches one hour candle (date_time 2006-01-02-15:04).
 func (c *Client) HourHistorical(ctx context.Context, symbol, dateTime string) (*CandleResponse, error) {
 	return c.candle(ctx, "/hour_historical", symbol, dateTime)
+}
+
+// CandleRaw returns a minute or hour historical response exactly as sent.
+func (c *Client) CandleRaw(ctx context.Context, symbol, dateTime string, hour bool) ([]byte, error) {
+	path := "/minute_historical"
+	if hour {
+		path = "/hour_historical"
+	}
+	params := url.Values{}
+	params.Set("currency", symbol)
+	params.Set("date_time", dateTime)
+	return c.getBody(ctx, path, params)
 }
 
 func (c *Client) candle(ctx context.Context, path, symbol, dateTime string) (*CandleResponse, error) {

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -31,15 +32,57 @@ const DefaultURL = "wss://stream.tradermade.com/feedAdv"
 // ErrAuth marks a login rejection - retrying will not help.
 var ErrAuth = errors.New("login rejected: invalid API key or streaming not enabled on your plan")
 
-// Tick is a live market update. All prices arrive as strings from the wire.
+// Tick is a live market update. Mid and Ladder are only present when the
+// login asked for ladder data.
+//
+// Price fields are strings, but careful: plain frames quote every value
+// while ladder frames send b/a/m as bare JSON numbers. The custom
+// unmarshaller below absorbs both so neither frame type gets dropped.
 type Tick struct {
-	Type      string `json:"t"`
-	Symbol    string `json:"s"`
-	Bid       string `json:"b"`
-	Ask       string `json:"a"`
-	BidVolume string `json:"bv"`
-	AskVolume string `json:"av"`
-	Timestamp string `json:"ts"`
+	Type      string  `json:"t"`
+	Symbol    string  `json:"s"`
+	Bid       string  `json:"b"`
+	Ask       string  `json:"a"`
+	Mid       string  `json:"m"`
+	BidVolume string  `json:"bv"`
+	AskVolume string  `json:"av"`
+	Timestamp string  `json:"ts"`
+	Ladder    *Ladder `json:"ladder"`
+}
+
+func (t *Tick) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type      string          `json:"t"`
+		Symbol    string          `json:"s"`
+		Bid       json.RawMessage `json:"b"`
+		Ask       json.RawMessage `json:"a"`
+		Mid       json.RawMessage `json:"m"`
+		BidVolume json.RawMessage `json:"bv"`
+		AskVolume json.RawMessage `json:"av"`
+		Timestamp string          `json:"ts"`
+		Ladder    *Ladder         `json:"ladder"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	t.Type, t.Symbol, t.Timestamp, t.Ladder = raw.Type, raw.Symbol, raw.Timestamp, raw.Ladder
+	t.Bid = unquote(raw.Bid)
+	t.Ask = unquote(raw.Ask)
+	t.Mid = unquote(raw.Mid)
+	t.BidVolume = unquote(raw.BidVolume)
+	t.AskVolume = unquote(raw.AskVolume)
+	return nil
+}
+
+// unquote keeps the wire text of a value that may or may not be quoted.
+func unquote(r json.RawMessage) string {
+	return strings.Trim(string(r), `"`)
+}
+
+// Ladder is market depth: [price, volume] levels, best first.
+type Ladder struct {
+	Asks [][]string `json:"a"`
+	Bids [][]string `json:"b"`
 }
 
 // control covers every non-tick message the server can send.
@@ -68,8 +111,14 @@ type Options struct {
 	Symbols []string // plain symbols, e.g. EURUSD - ":QUOTE" is appended automatically
 	// SendLast asks the server to send the cached last tick on subscribe.
 	SendLast bool
+	// SendLadder asks for market depth on login. Needs the trader ladder
+	// enabled on the plan; ticks then carry a Ladder and a mid price.
+	SendLadder bool
 	// OnTick gets every market update; raw is the original wire payload.
 	OnTick func(t Tick, raw []byte)
+	// OnRaw, if set, gets every frame exactly as received - control
+	// messages, greetings, ticks - before any parsing or filtering.
+	OnRaw func(raw []byte)
 	// Logf, if set, receives connection lifecycle messages.
 	Logf func(format string, args ...any)
 }
@@ -172,7 +221,17 @@ func runOnce(ctx context.Context, opts Options, symbols []string, backoff *time.
 		}
 	}()
 
-	login := map[string]string{"action": "login", "key": opts.Key, "fmt": "JSON"}
+	// TRADERMADE_WS_DEBUG=1 logs the raw frames we send, for support cases.
+	wsDebug := os.Getenv("TRADERMADE_WS_DEBUG") != ""
+
+	login := map[string]any{"action": "login", "key": opts.Key, "fmt": "JSON"}
+	if opts.SendLadder {
+		login["send_ladder"] = true
+	}
+	if wsDebug {
+		raw, _ := json.Marshal(login)
+		opts.logf("debug send: %s", string(raw))
+	}
 	if err := conn.WriteJSON(login); err != nil {
 		return fmt.Errorf("send login: %w", err)
 	}
@@ -184,6 +243,10 @@ func runOnce(ctx context.Context, opts Options, symbols []string, backoff *time.
 			return fmt.Errorf("read: %w", err)
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+
+		if opts.OnRaw != nil {
+			opts.OnRaw(msg)
+		}
 
 		// The server may send plain-text greetings (e.g. "Connected") - skip them.
 		if !json.Valid(msg) {
@@ -202,7 +265,12 @@ func runOnce(ctx context.Context, opts Options, symbols []string, backoff *time.
 		switch {
 		case kind.T == "QUOTE" || kind.T == "LAST_QUOTE":
 			var tick Tick
-			if err := json.Unmarshal(msg, &tick); err == nil && opts.OnTick != nil {
+			if err := json.Unmarshal(msg, &tick); err != nil {
+				// Never drop a frame silently - surface parse problems.
+				opts.logf("unparseable tick: %v: %s", err, string(msg))
+				continue
+			}
+			if opts.OnTick != nil {
 				opts.OnTick(tick, msg)
 			}
 
@@ -211,10 +279,17 @@ func runOnce(ctx context.Context, opts Options, symbols []string, backoff *time.
 			*backoff = time.Second
 			var c control
 			_ = json.Unmarshal(msg, &c)
+			if wsDebug {
+				opts.logf("debug recv: %s", string(msg))
+			}
 			opts.logf("connected - plan allows %d simultaneous symbols", c.SymbolLimit)
 			sub := map[string]any{"action": "subscribe", "symbols": symbols}
 			if opts.SendLast {
 				sub["send_last"] = true
+			}
+			if wsDebug {
+				raw, _ := json.Marshal(sub)
+				opts.logf("debug send: %s", string(raw))
 			}
 			if err := conn.WriteJSON(sub); err != nil {
 				return fmt.Errorf("send subscribe: %w", err)

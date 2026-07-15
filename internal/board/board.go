@@ -169,9 +169,12 @@ type model struct {
 	width     int
 	ticks     int // total ticks this session, for the footer
 
-	// REST cross-check state ("c" key).
+	// REST cross-check state ("c" key). Diffs are computed once, at the
+	// moment the snapshot arrives, against the stream price of that same
+	// moment - so the column stays a valid point-in-time comparison and
+	// doesn't drift as the market moves on.
 	restKey  string
-	restMids map[string]float64
+	restDiff map[string]float64
 	restAt   time.Time
 	checking bool
 }
@@ -264,9 +267,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = "rest-check failed: " + msg.err.Error()
 		} else {
-			m.restMids = msg.mids
+			m.restDiff = make(map[string]float64, len(msg.mids))
+			for sym, restMid := range msg.mids {
+				r := m.rows[sym]
+				if r == nil || restMid == 0 || r.bidF == 0 {
+					continue
+				}
+				streamMid := r.bidF
+				if ask, err := strconv.ParseFloat(r.ask, 64); err == nil {
+					streamMid = (r.bidF + ask) / 2
+				}
+				m.restDiff[sym] = (streamMid - restMid) / restMid * 100
+			}
 			m.restAt = msg.at
-			m.status = "REST snapshot loaded - press c to refresh"
+			m.status = "REST snapshot compared - press c to refresh"
 		}
 
 	case statusMsg:
@@ -356,8 +370,8 @@ func (m model) View() string {
 	}
 	header := fmt.Sprintf(" %-10s %2s %14s %14s %12s %10s %8s",
 		"SYMBOL", "", "BID", "ASK", "SPREAD", deltaLabel, "LAST")
-	if m.restMids != nil {
-		header += fmt.Sprintf(" %14s %9s", "REST MID", "DIFF")
+	if m.restDiff != nil {
+		header += fmt.Sprintf(" %9s", "DIFF")
 	}
 	b.WriteString(headerStyle.Render(header) + "\n")
 
@@ -393,8 +407,8 @@ func (m model) View() string {
 			style.Render(prices) +
 			fmt.Sprintf(" %10s %8s", changePct(m.changeBasis(sym), r.bidF), age(m.now, r.lastTick))
 
-		if m.restMids != nil {
-			line += restCheckCells(m.restMids[sym], r)
+		if m.restDiff != nil {
+			line += restDiffCell(m.restDiff, sym)
 		}
 		b.WriteString(line + "\n")
 	}
@@ -413,28 +427,20 @@ func (m model) View() string {
 // 0.05% on a mid price is far beyond normal snapshot skew for liquid pairs.
 const restDivergenceThreshold = 0.05
 
-// restCheckCells renders the REST MID and DIFF columns for one row.
-// DIFF is the stream mid's deviation from the REST snapshot mid; large
-// gaps render in red as a data-quality flag.
-func restCheckCells(restMid float64, r *row) string {
-	if restMid == 0 {
-		return fmt.Sprintf(" %14s %9s", "-", "-")
+// restDiffCell renders the frozen point-in-time deviation for one row.
+// Large gaps render in red as a data-quality flag.
+func restDiffCell(diffs map[string]float64, sym string) string {
+	d, ok := diffs[sym]
+	if !ok {
+		return fmt.Sprintf(" %9s", "-")
 	}
-	streamMid := r.bidF
-	if ask, err := strconv.ParseFloat(r.ask, 64); err == nil && r.bidF != 0 {
-		streamMid = (r.bidF + ask) / 2
-	}
-	if streamMid == 0 {
-		return fmt.Sprintf(" %14s %9s", strconv.FormatFloat(restMid, 'f', decimals(r.bid), 64), "-")
-	}
-	diff := (streamMid - restMid) / restMid * 100
-	cell := fmt.Sprintf("%+.3f%%", diff)
-	if diff > restDivergenceThreshold || diff < -restDivergenceThreshold {
+	cell := fmt.Sprintf("%+.3f%%", d)
+	if d > restDivergenceThreshold || d < -restDivergenceThreshold {
 		cell = downStyle.Render(cell)
 	} else {
 		cell = footerStyle.Render(cell)
 	}
-	return fmt.Sprintf(" %14s %9s", strconv.FormatFloat(restMid, 'f', decimals(r.bid), 64), cell)
+	return fmt.Sprintf(" %9s", cell)
 }
 
 // spread computes ask-bid, keeping the same decimal precision the wire uses.

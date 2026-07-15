@@ -8,8 +8,9 @@ import (
 )
 
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version and build information",
+	Use:     "version",
+	Short:   "Show version and build information",
+	GroupID: "local",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Printf("tradermade %s\n", Version)
 		commit, date := Commit, Date

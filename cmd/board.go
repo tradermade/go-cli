@@ -14,14 +14,24 @@ import (
 var boardSort string
 
 var boardCmd = &cobra.Command{
-	Use:   "board [SYMBOL...]",
-	Short: "Live watchlist dashboard in the terminal",
+	Use:     "board [SYMBOL...]",
+	Short:   "Dashboard (WebSocket /feedAdv; REST /historical and /live)",
+	GroupID: "combined",
 	Long: `A full-screen dashboard where your watchlist symbols update in place
 as ticks arrive: bid/ask, spread, day change, and green/red flashes
 on movement.
 
 The DAY% column is change vs the previous daily close (fetched via REST at
 startup); without a REST key it falls back to change since the session began.
+
+API construction:
+  WebSocket /feedAdv  login fmt=JSON; subscribe symbols from arguments or the
+                      saved watchlist; send_last=true.
+  REST /historical   currency is the board symbol list; date walks backward
+                      from yesterday UTC to find the latest available close.
+  REST /live         currency is the board symbol list; requested when c is
+                      pressed to compare the streaming and REST prices.
+  API keys           Added automatically from configured WS/REST keys.
 
 Keys:
   q  quit

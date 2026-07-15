@@ -8,6 +8,7 @@ import (
 	"io"
 	"strconv"
 	"text/tabwriter"
+	"time"
 )
 
 // Format selects the rendering mode.
@@ -17,15 +18,16 @@ const (
 	Table Format = "table"
 	JSON  Format = "json"
 	CSV   Format = "csv"
+	Raw   Format = "raw"
 )
 
 // ParseFormat validates the --output flag value.
 func ParseFormat(s string) (Format, error) {
 	switch Format(s) {
-	case Table, JSON, CSV:
+	case Table, JSON, CSV, Raw:
 		return Format(s), nil
 	default:
-		return "", fmt.Errorf("invalid output format %q - use table, json, or csv", s)
+		return "", fmt.Errorf("invalid output format %q - use json, csv, or raw; omit --output for table", s)
 	}
 }
 
@@ -60,4 +62,9 @@ func TableWriter(w io.Writer) *tabwriter.Writer {
 // Price formats a float without artificial rounding or trailing zeros.
 func Price(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+// UnixUTC renders a server epoch timestamp as a readable UTC time.
+func UnixUTC(ts int64) string {
+	return time.Unix(ts, 0).UTC().Format("2006-01-02 15:04:05 UTC")
 }

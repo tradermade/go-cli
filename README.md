@@ -1,304 +1,280 @@
 # TraderMade CLI
 
-Command line client for the [TraderMade](https://tradermade.com) market data
-API. Live quotes, historical candles, currency conversion, and WebSocket
-streaming for forex, metals, crypto and CFDs.
+Command-line access to the [TraderMade](https://tradermade.com) REST and
+WebSocket APIs for forex, crypto, metals, and CFDs.
 
-```
-$ tradermade quote EURUSD GBPUSD
-SYMBOL  BID      ASK      MID
-EURUSD  1.14105  1.14113  1.14109
-GBPUSD  1.33489  1.33501  1.33495
+## 1. Install
 
-as of Wed, 08 Jul 2026 10:29:11 GMT
-```
-
-## Install
-
-Grab a binary from [Releases](../../releases), or with Go installed:
+With Go installed:
 
 ```bash
 go install github.com/tradermade/go-cli@latest
 ```
 
-To build from source: `git clone`, then `make build` (or plain
-`go build -o tradermade .`).
+Or download a binary from [Releases](../../releases).
 
-## API keys
-
-You need a key from [tradermade.com/signup](https://tradermade.com/signup).
-If one key covers both REST and streaming:
+To build from source:
 
 ```bash
-tradermade config set-key YOUR_API_KEY
+git clone https://github.com/tradermade/go-cli.git
+cd go-cli
+go build -o tradermade .
 ```
 
-Some plans have separate REST and WebSocket keys. Save both and each command
-picks the right one:
+Confirm the installation:
+
+```console
+$ tradermade version
+tradermade 0.1.0-dev
+commit abc1234, built 2026-07-08, go1.24.0 windows/amd64
+```
+
+## 2. Configure API keys
+
+Create keys from [tradermade.com/signup](https://tradermade.com/signup).
+REST commands use a REST key; `live` and `board` use a WebSocket key.
 
 ```bash
 tradermade config set-key --rest YOUR_REST_KEY
-tradermade config set-key --ws   YOUR_WS_KEY
+tradermade config set-key --ws YOUR_WEBSOCKET_KEY
 ```
 
-If a key starts with a dash, put `--` before it so it isn't parsed as a
-flag: `tradermade config set-key --rest -- -abc123`.
-
-Environment variables override saved keys (handy for CI and Docker):
-`TRADERMADE_REST_API_KEY`, `TRADERMADE_WS_API_KEY`, or plain
-`TRADERMADE_API_KEY` for both.
-
-Run `tradermade doctor` to check the whole setup in one go.
-
-## Output formats
-
-Every data command takes `--output table|json|csv` (`-o` for short).
-Table is the default. JSON is stable for scripts and jq. CSV has a header
-row and proper quoting, so redirecting to a file gives you something Excel
-and pandas open directly:
+You can save both together:
 
 ```bash
-tradermade timeseries EURUSD --last 30d --output csv > eurusd.csv
+tradermade config set-key --rest YOUR_REST_KEY --ws YOUR_WEBSOCKET_KEY
 ```
 
-For `live`, json means one JSON object per line (NDJSON) and csv means one
-row per tick. Both are safe to redirect while the stream runs.
+Environment variables override saved keys:
 
-## Commands and endpoints
+- `TRADERMADE_REST_API_KEY`
+- `TRADERMADE_WS_API_KEY`
+- `TRADERMADE_API_KEY` as a fallback for both
 
-| Command | Endpoint | Key |
-| --- | --- | --- |
-| `quote` | `/api/v1/live` | REST |
-| `convert` | `/api/v1/convert` | REST |
-| `historical` | `/api/v1/historical` | REST |
-| `timeseries` | `/api/v1/timeseries` | REST |
-| `candle` | `/api/v1/minute_historical`, `/hour_historical` | REST |
-| `symbols` | `/api/v1/live_currencies_list`, `/live_crypto_list` | REST |
-| `live` | `wss://stream.tradermade.com/feedAdv` | WS |
-| `board` | feedAdv, plus `/historical` at startup and `/live` on the c key | both |
-| `doctor` | `/live` probe plus a WS login | both |
-| `config`, `version` | none, local only | - |
+Check the active configuration and connectivity:
 
-### quote
+```console
+$ tradermade config show
+rest    abcd********wxyz  (from config.json (rest_key))
+stream  wsab********wxyz  (from config.json (ws_key))
+```
 
-Live bid/ask/mid for any number of symbols.
+## 3. Help
+
+Use the long help flag for the complete endpoint list:
+
+```console
+$ tradermade --help
+REST API:
+  candle      One candle (REST /api/v1/minute_historical or /api/v1/hour_historical)
+  convert     Currency conversion (REST /api/v1/convert)
+  historical  Daily OHLC (REST /api/v1/historical)
+  quote       Live quotes (REST /api/v1/live)
+  symbols     Codes (REST /api/v1/live_currencies_list or /api/v1/live_crypto_list)
+  timeseries  OHLC candle ranges (REST /api/v1/timeseries)
+
+WebSocket API:
+  live        Live ticks (WebSocket wss://stream.tradermade.com/feedAdv)
+
+REST + WebSocket:
+  board       Dashboard (WebSocket /feedAdv; REST /historical and /live)
+  doctor      Connectivity check (REST /live; WebSocket /feedAdv)
+```
+
+Use `tradermade COMMAND --help` to see how that endpoint is constructed,
+including arguments, API parameters, valid values, limits, flags, and examples:
 
 ```bash
-tradermade quote EURUSD
-tradermade quote EURUSD GBPUSD XAUUSD BTCUSD
-tradermade quote UK100                          # CFDs too
-tradermade quote EURUSD --output json
-tradermade quote EURUSD GBPUSD --output csv > prices.csv
+tradermade timeseries --help
+tradermade live --help
+tradermade historical --help
 ```
 
-### convert
+Only the long `--help` form is supported. The `tradermade help` command and
+`-h` shorthand are intentionally unavailable. The exhaustive command catalog
+is in [cmds.md](cmds.md).
 
-`AMOUNT FROM TO` at the live rate.
+## 4. REST endpoints
 
-```bash
-tradermade convert 1000 USD INR
-tradermade convert 250.50 EUR GBP
-tradermade convert 1000 USD JPY --output csv
+Table output is the default. Do not pass `--output table`.
+
+### Live quotes - `/api/v1/live`
+
+```console
+$ tradermade quote EURUSD GBPUSD
+SYMBOL  BID      ASK      MID
+EURUSD  1.14105  1.14113  1.14109
+GBPUSD  1.33489  1.33501  1.33495
+
+as of 2026-07-08 10:29:11 UTC
 ```
 
-### symbols
+The timestamp is the server quote timestamp, not local request time.
+Use `--save quote.csv` to save the snapshot as CSV.
 
-What your plan can request. Filtering happens client side.
+### Convert - `/api/v1/convert`
 
-```bash
-tradermade symbols
-tradermade symbols --grep GBP
-tradermade symbols --market crypto --grep BTC
-tradermade symbols --output csv > codes.csv
+```console
+$ tradermade convert 1000 USD INR
+1000 USD = 85812.5 INR
+rate  1 USD = 85.8125 INR
+as of 2026-07-08 10:29:11 UTC
 ```
 
-### historical
+Arguments map to the API's `amount`, `from`, and `to` parameters.
 
-Daily OHLC for one or more symbols on a date. `--date` takes
-`2006-01-02`, `today`, or `yesterday` (the default).
+### Symbol lists - `/api/v1/live_currencies_list`
 
-```bash
-tradermade historical EURUSD
-tradermade historical EURUSD --date 2026-07-01
-tradermade historical EURUSD GBPUSD XAUUSD --date yesterday
-tradermade historical EURUSD --date 2026-07-01 --output csv
+```console
+$ tradermade symbols
+AED  UAE Dirham
+ARS  Argentine Peso
+AUD  Australian Dollar
+...
+
+54 codes
 ```
 
-### timeseries
+Use `--market crypto` to select `/api/v1/live_crypto_list`. The complete list
+from the selected endpoint is returned.
 
-A range of candles. Intervals: `daily` (default), `hourly`, `minute`.
-`--period` multiplies the interval (minute + period 15 = 15-minute candles).
+### Historical daily OHLC - `/api/v1/historical`
 
-Relative ranges with `--last` (units: `d` days, `w` weeks, `h` hours,
-`m` minutes):
+```console
+$ tradermade historical EURUSD --date 2026-07-01
+SYMBOL  OPEN     HIGH     LOW      CLOSE
+EURUSD  1.17263  1.18094  1.16836  1.17951
 
-```bash
-tradermade timeseries EURUSD --last 7d
-tradermade timeseries EURUSD --last 2w
-tradermade timeseries GBPUSD --last 12h --interval hourly
-tradermade timeseries EURUSD --last 90m --interval minute --period 15
-tradermade timeseries EURUSD --last 24h --interval hourly --period 4
+daily candle for 2026-07-01
 ```
 
-Or explicit `--start` / `--end`, as a day or an intraday point
-(`YYYY-MM-DD-HH:MM`). `--end` defaults to now:
+`--date` accepts `YYYY-MM-DD`, `today`, or `yesterday` (the default).
 
-```bash
-tradermade timeseries EURUSD --start 2026-06-01 --end 2026-07-01
-tradermade timeseries EURUSD --start 2026-06-01
-tradermade timeseries EURUSD --start 2026-07-07-09:00 --end 2026-07-07-17:00 --interval minute
+### Timeseries OHLC - `/api/v1/timeseries`
+
+```console
+$ tradermade timeseries EURUSD --start 2026-07-01 --end 2026-07-03
+DATE        OPEN     HIGH     LOW      CLOSE
+2026-07-01  1.17263  1.18094  1.16836  1.17951
+2026-07-02  1.17951  1.18291  1.17542  1.18017
+2026-07-03  1.18017  1.18135  1.17268  1.17443
+
+EURUSD daily candles, 3 rows
 ```
 
-Export:
+The command supports daily, hourly, and minute intervals. Run
+`tradermade timeseries --help` for `start_date`, `end_date`, `interval`, `period`,
+`weekend`, relative `--last` ranges, and per-request limits.
 
-```bash
-tradermade timeseries EURUSD --last 30d --output csv > eurusd.csv
+### Exact minute/hour candle - `/api/v1/minute_historical`
+
+```console
+$ tradermade candle EURUSD --at 2026-07-07-14:30
+SYMBOL  TIME              OPEN     HIGH     LOW      CLOSE
+EURUSD  2026-07-07-14:30  1.17182  1.17204  1.17161  1.17193
 ```
 
-History depth is plan-dependent (roughly: daily 10-20 years, hourly 1-8,
-minute 1-5). Requests outside your range come back as a 403 with an
-explanation.
+Add `--hour` to use `/api/v1/hour_historical` instead. `--at` uses
+`YYYY-MM-DD-HH:MM`.
 
-### candle
+## 5. WebSocket endpoint
 
-One exact candle at a time you specify.
+### Live streaming - `wss://stream.tradermade.com/feedAdv`
 
-```bash
-tradermade candle EURUSD --at 2026-07-07-14:30           # minute
-tradermade candle EURUSD --at 2026-07-07-14:00 --hour    # hour
-tradermade candle XAUUSD --at 2026-07-07-14:30 --output csv
+```console
+$ tradermade live EURUSD
+TIME                    SYMBOL                BID            ASK    BID-VOL    ASK-VOL
+20260708-10:29:11.104   EURUSD            1.14105        1.14113      100000      100000
+20260708-10:29:11.337   EURUSD            1.14106        1.14114      200000      100000
 ```
 
-### live
+Stop with Ctrl+C. The client logs in with `fmt=JSON`, reconnects with backoff,
+and resubscribes automatically. `--send-last` requests a cached `LAST_QUOTE`;
+`--ladder` requests depth for plans with trader-ladder access. See
+`tradermade live --help` for the exact login and subscription messages.
 
-Streams ticks until Ctrl+C. Reconnects and resubscribes on its own if the
-connection drops; keepalive pings mean a dead connection is noticed within
-about 75 seconds even when the market is quiet.
+## 6. Commands using REST and WebSocket
 
-```bash
-tradermade live EURUSD
-tradermade live EURUSD GBPUSD XAUUSD BTCUSD
-tradermade live EURUSD --output json > ticks.ndjson
-tradermade live EURUSD --output csv  > ticks.csv
+### Board
+
+`board` streams prices over `/feedAdv`, fetches previous closes from
+`/historical`, and can compare prices with `/live`.
+
+```console
+$ tradermade board EURUSD GBPUSD
+tradermade board
+
+ SYMBOL                   BID            ASK       SPREAD       DAY%     LAST
+ EURUSD                1.14105        1.14113      0.00008      0.21%       0s
+ GBPUSD                1.33489        1.33501      0.00012     -0.08%       0s
+
+ connected | 1 up 1 down | 24 ticks | sort: list (s) | c rest-check | q quit
 ```
 
-Status messages go to stderr and data to stdout, so redirects capture only
-the data.
+Use `board add`, `board remove`, and `board list` to manage a saved watchlist.
+Inside the board: `q` quits, `s` changes sorting, and `c` runs a REST comparison.
 
-### board
+### Doctor
 
-Full-screen dashboard. Rows update in place, movement flashes green/red,
-with bid/ask, spread, day change and tick age columns plus an up/down
-summary in the footer.
-
-```bash
-tradermade board add EURUSD GBPUSD XAUUSD    # saved watchlist
-tradermade board remove XAUUSD
-tradermade board list
-tradermade board                             # run the saved list
-tradermade board BTCUSD ETHUSD               # one-off, list untouched
-tradermade board --sort change               # biggest mover first
-```
-
-Keys inside the board:
-
-- `q` quit
-- `s` cycle sort: watchlist order, alphabetical, biggest mover
-- `c` rest-check: snapshot REST /live and show each symbol's REST mid next
-  to the stream price. Deviation beyond 0.05% shows red. Quick way to see
-  whether the stream and REST agree right now.
-
-The DAY% column compares against the previous daily close, fetched over
-REST at startup (weekends and holidays are skipped automatically). No REST
-key: the board still runs and shows change since the session began.
-
-The watchlist is a plain text file, one symbol per line, `#` comments
-allowed. Edit it by hand if you like.
-
-### doctor
-
-Checks keys, REST reachability and latency, WebSocket login and plan
-limits, and the config file. Exit 0 when everything passes, 1 otherwise,
-so it doubles as a CI smoke test. `--output json` gives a report you can
-paste into a support ticket.
-
-```
+```console
 $ tradermade doctor
-rest-key  ok  abcd************wxyz (from config.json (rest_key))
+rest-key  ok  abcd********wxyz (from config.json (rest_key))
 rest      ok  live quote in 210ms
-ws-key    ok  wsab************wxyz (from config.json (ws_key))
+ws-key    ok  wsab********wxyz (from config.json (ws_key))
 stream    ok  login in 180ms - plan allows 20 symbols
 config    ok  ~/.config/tradermade/config.json
 ```
 
-### config
+`doctor` checks key resolution, REST connectivity, WebSocket login and plan
+capabilities, and config-file validity. It exits nonzero if a check fails.
+
+## Output formats
+
+No output flag means table output. Explicit `--output table` is rejected.
+
+- `--output json`: exact TraderMade response body for REST commands; original
+  market tick frames for `live`.
+- `--output csv`: CLI-generated CSV with a header row.
+- `--output raw`: `live` only; includes greetings and WebSocket control frames.
+
+## Saving CSV files
+
+`quote`, `historical`, `timeseries`, and `live` require `--save` to include a
+`.csv` filename:
 
 ```bash
-tradermade config set-key YOUR_KEY          # one key for both
-tradermade config set-key --rest YOUR_KEY
-tradermade config set-key --ws YOUR_KEY
-tradermade config show                      # masked keys and where they come from
-tradermade config path
+tradermade quote UK100 --save quote.csv
+tradermade historical EURUSD --save historical.csv
+tradermade timeseries EURUSD --last 30d --save "C:\data\market exports\timeseries.csv"
+tradermade live EURUSD --save ticks.csv
 ```
 
-### version
-
-Prints version, commit, build date, Go version and platform.
-
-## A note on streaming latency
-
-There is no polling and no buffering in the streaming path. The server
-pushes each tick, the CLI parses it and writes it out in the same read
-loop, and stdout is unbuffered. The board renders on every tick as well
-(its internal 250ms timer only fades flashes and updates the age column).
-Whatever latency you see is network distance to stream.tradermade.com.
-Each tick carries the server timestamp (`ts` in the JSON output) if you
-want to measure it yourself.
+Bare filenames are saved in the current working directory, and the absolute
+location is reported. A complete path is also accepted when it includes the
+filename, such as `C:\Users\Omkar\Downloads\file.csv`. Directory-only targets
+are rejected. REST saves overwrite; live appends and reports its path after the
+first saved tick.
 
 ## Errors and exit codes
 
-Exit 0 on success, 1 on any error. API errors get translated:
+Commands exit `0` on success and nonzero on errors. Common REST failures:
 
 | HTTP | Meaning |
 | --- | --- |
-| 401 | bad key, or endpoint not in your plan |
-| 204 | no data for those parameters |
-| 400 | bad request parameters |
-| 403 | market closed (weekend) or date outside your history range |
-
-A WebSocket-scoped key used against REST gets a hint saying so. A rejected
-WS login fails immediately rather than retrying forever. Transient network
-errors on REST calls are retried twice before giving up.
+| 401 | Invalid key or endpoint not included in the plan |
+| 204 | No data for the requested parameters |
+| 400 | Invalid symbol, date, or other request parameter |
+| 403 | Weekend/closed market or history outside the plan range |
 
 ## Development
 
 ```bash
-make build     # version-stamped binary
-make check     # vet + tests + gofmt, same as CI
-make install   # build into GOPATH/bin
+make build
+make check
+make install
 ```
 
-CI runs vet, tests and a build on Linux, Windows and macOS.
-
-Layout:
-
-```
-main.go              entry point
-cmd/                 cobra commands, kept thin
-internal/api/        REST client (no CLI deps, SDK-extractable)
-internal/stream/     WebSocket client: reconnect, resubscribe, keepalive
-internal/board/      bubbletea dashboard
-internal/watchlist/  watchlist file
-internal/dates/      date parsing (yesterday, --last 30d)
-internal/config/     key resolution
-internal/output/     table / json / csv
-```
-
-## Roadmap
-
-Planned: tick history export to CSV, code snippet generation
-(`--show python|go|curl`), price alerts with webhooks, packaged releases
-(Homebrew, Scoop, Docker), MCP server mode.
+CI runs formatting, tests, vet, and builds on Linux, Windows, and macOS.
 
 ## License
 
