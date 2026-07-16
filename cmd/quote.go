@@ -27,7 +27,10 @@ API query construction:
 Symbols are uppercased. Forex, crypto pairs, and enabled CFD instruments are
 accepted. --output json prints the JSON response exactly as the server sent it.
 --save requires a .csv filename. A bare filename is created in the current
-working directory; a path is accepted when it includes the filename.`,
+working directory; a path is accepted when it includes the filename. Saving
+appends: re-running with the same filename adds rows and keeps earlier data,
+writing the header only once - so a scheduled "live --save prices.csv" builds
+up a history instead of overwriting it.`,
 	Example: `  tradermade live EURUSD
   tradermade live EURUSD GBPUSD XAUUSD
   tradermade live BTCUSD --output json`,
@@ -109,6 +112,6 @@ working directory; a path is accepted when it includes the filename.`,
 
 func init() {
 	restLiveCmd.Flags().StringVar(&restLiveSave, "save", "",
-		"write CSV to a .csv filename (overwrites)")
+		"write CSV to a .csv filename (appends; header written once)")
 	rootCmd.AddCommand(restLiveCmd)
 }

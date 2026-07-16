@@ -53,11 +53,20 @@ func TestResolveSavePathRequiresFilename(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	// Compare against the working directory as reported after chdir, not the
+	// raw t.TempDir() string: on macOS TempDir lives under /var (a symlink to
+	// /private/var) and resolveSavePath's filepath.Abs returns the resolved
+	// form, so a literal dir comparison would fail there while passing on
+	// Linux and Windows.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	fromBare, err := resolveSavePath("historical.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(dir, "historical.csv"); fromBare != want {
+	if want := filepath.Join(cwd, "historical.csv"); fromBare != want {
 		t.Errorf("bare filename resolved to %q, want %q", fromBare, want)
 	}
 
@@ -69,7 +78,7 @@ func TestResolveSavePathRequiresFilename(t *testing.T) {
 	}
 }
 
-func TestSaveCSVOverwrites(t *testing.T) {
+func TestSaveCSVAppends(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.csv")
 	header := []string{"a", "b"}
 
@@ -80,9 +89,11 @@ func TestSaveCSVOverwrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)
-	want := "a,b\n5,6\n"
+	// Second save appends its rows and does not repeat the header, so a
+	// re-run (e.g. a cron job) accumulates data instead of discarding it.
+	want := "a,b\n1,2\n3,4\n5,6\n"
 	if string(data) != want {
-		t.Errorf("got %q, want %q (second save should overwrite)", data, want)
+		t.Errorf("got %q, want %q (second save should append without a new header)", data, want)
 	}
 }
 

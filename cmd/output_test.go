@@ -29,15 +29,3 @@ func TestRawOutput(t *testing.T) {
 		t.Fatal("expected conflicting --raw --output csv to fail")
 	}
 }
-
-func TestExplicitTableOutputIsRejected(t *testing.T) {
-	if err := validateOutputSelection(output.Table, false); err != nil {
-		t.Fatalf("implicit table rejected: %v", err)
-	}
-	if err := validateOutputSelection(output.Table, true); err == nil {
-		t.Fatal("explicit --output table was accepted")
-	}
-	if err := validateOutputSelection(output.JSON, true); err != nil {
-		t.Fatalf("explicit JSON rejected: %v", err)
-	}
-}

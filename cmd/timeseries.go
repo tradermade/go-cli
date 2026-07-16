@@ -46,7 +46,9 @@ Range limits per API call: daily one year, hourly one month, minute two days.
 --last accepts d (days), w (weeks), h (hours), or m (minutes) and cannot be
 combined with --start/--end. --output json preserves the server JSON exactly.
 --save requires a .csv filename. A bare filename is created in the current
-working directory; a path is accepted when it includes the filename.`,
+working directory; a path is accepted when it includes the filename. Saving
+appends: re-running with the same filename adds rows and keeps earlier data,
+writing the header only once.`,
 	Example: `  tradermade timeseries EURUSD --start 2026-06-01 --end 2026-07-01
   tradermade timeseries EURUSD --last 30d
   tradermade timeseries GBPUSD --last 12h --interval hourly
@@ -212,6 +214,6 @@ func init() {
 	timeseriesCmd.Flags().IntVar(&tsPeriod, "period", 0, "interval multiplier, e.g. --interval minute --period 15")
 	timeseriesCmd.Flags().BoolVar(&tsWeekend, "weekend", false, "include weekend crypto data (crypto pairs only)")
 	timeseriesCmd.Flags().StringVar(&tsSave, "save", "",
-		"write CSV to a .csv filename (overwrites)")
+		"write CSV to a .csv filename (appends; header written once)")
 	rootCmd.AddCommand(timeseriesCmd)
 }

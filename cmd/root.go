@@ -4,10 +4,8 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -68,40 +66,11 @@ func init() {
 	)
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", string(output.Table),
 		"select json or csv; stream also supports raw (omit for table)")
-	rootCmd.PersistentFlags().Bool("help", false, "show help for this command")
-	rootCmd.PersistentFlags().BoolFuncP("short-help-disabled", "h", "", func(string) error {
-		return fmt.Errorf("-h is not supported; use --help")
-	})
-	_ = rootCmd.PersistentFlags().MarkHidden("short-help-disabled")
-	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		if strings.Contains(err.Error(), "short-help-disabled") {
-			return fmt.Errorf("-h is not supported; use --help")
-		}
-		return err
-	})
-	// Suppress Cobra's "help" subcommand. Help is exposed only through the
-	// long --help flag; the hidden alternate name prevents default creation.
-	rootCmd.SetHelpCommand(&cobra.Command{Use: "__help", Hidden: true})
 	rootCmd.Version = Version
 	api.UserAgent = "tradermade-cli/" + Version
 }
 
 // outputFormat parses the --output flag, failing fast on invalid values.
 func outputFormat() (output.Format, error) {
-	format, err := output.ParseFormat(outputFlag)
-	if err != nil {
-		return "", err
-	}
-	flag := rootCmd.PersistentFlags().Lookup("output")
-	if err := validateOutputSelection(format, flag != nil && flag.Changed); err != nil {
-		return "", err
-	}
-	return format, nil
-}
-
-func validateOutputSelection(format output.Format, explicitlySet bool) error {
-	if format == output.Table && explicitlySet {
-		return fmt.Errorf("table is already the default; omit --output table")
-	}
-	return nil
+	return output.ParseFormat(outputFlag)
 }

@@ -119,17 +119,20 @@ func checkSavePath(path string) error {
 	return nil
 }
 
-// saveCSV writes header+rows to path, overwriting any existing file.
+// saveCSV appends header+rows to path, creating it if needed. The header is
+// written only when the file is new or empty, so repeated saves to the same
+// filename accumulate rows instead of discarding earlier data - for example a
+// cron job re-running `live --save prices.csv` every few minutes keeps every
+// snapshot rather than replacing the file each run.
 func saveCSV(path string, header []string, rows [][]string) error {
-	if err := checkSavePath(path); err != nil {
+	f, w, needHeader, err := openCSVAppend(path)
+	if err != nil {
 		return err
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("cannot create %q: %w", path, err)
+	var werr error
+	if needHeader {
+		werr = w.Write(header)
 	}
-	w := csv.NewWriter(f)
-	werr := w.Write(header)
 	for _, r := range rows {
 		if werr == nil {
 			werr = w.Write(r)

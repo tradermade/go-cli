@@ -79,13 +79,12 @@ tradermade stream --help
 tradermade historical --help
 ```
 
-Only the long `--help` form is supported. The `tradermade help` command and
-`-h` shorthand are intentionally unavailable. The exhaustive command catalog
-is in [cmds.md](cmds.md).
+`--help`, the `-h` shorthand, and `tradermade help COMMAND` all work. The
+exhaustive command catalog is in [cmds.md](cmds.md).
 
 ## 4. Live REST rates
 
-Table output is the default. Do not pass `--output table`.
+Table output is the default.
 
 Command: `live`
 
@@ -113,8 +112,10 @@ tradermade live EURUSD --save eurusd-live.csv
 ```
 
 The CLI saves a bare filename in the current working directory and reports its
-absolute path. If `eurusd-live.csv` already exists, its previous contents are
-replaced.
+absolute path. Saving appends: if `eurusd-live.csv` already exists, the new row
+is added after the existing rows and the header is not written again. Re-running
+the same `--save` command (for example from a scheduler every few minutes) keeps
+building the same file instead of replacing it.
 
 ## 5. Timeseries OHLC
 
@@ -149,7 +150,8 @@ Save the returned candles as CSV:
 tradermade timeseries EURUSD --start 2026-07-01 --end 2026-07-03 --save eurusd-timeseries.csv
 ```
 
-If the file already exists, the REST save replaces its previous contents.
+If the file already exists, the new candles are appended after the existing
+rows and the header is not repeated.
 
 ## 6. Configure the WebSocket API key
 
@@ -222,9 +224,9 @@ Inside the board: `q` quits, `s` changes sorting, and `c` runs a REST comparison
 ```console
 $ tradermade doctor
 rest-key  ok  abcd********wxyz (from config.json (rest_key))
-rest      ok  live quote in 210ms
+rest      ok  live quote ok
 ws-key    ok  wsab********wxyz (from config.json (ws_key))
-stream    ok  login in 180ms - plan allows 20 symbols
+stream    ok  login ok - plan allows 20 symbols
 config    ok  ~/.config/tradermade/config.json
 ```
 
@@ -233,7 +235,7 @@ capabilities, and config-file validity. It exits nonzero if a check fails.
 
 ## Output formats
 
-No output flag means table output. Explicit `--output table` is rejected.
+No output flag means table output; `--output table` selects it explicitly.
 
 - `--output json`: exact TraderMade response body for REST commands; original
   market tick frames for `stream`.
@@ -254,9 +256,11 @@ tradermade stream EURUSD --save ticks.csv
 
 Bare filenames are saved in the current working directory, and the absolute
 location is reported. A complete path is also accepted when it includes the
-filename, such as `C:\Users\Omkar\Downloads\file.csv`. Directory-only targets
-are rejected. REST saves overwrite; stream appends and reports its path after the
-first saved tick.
+filename, such as `C:\Users\OP\Downloads\file.csv`. Directory-only targets
+are rejected. All saves append: re-running a command with the same `--save`
+filename adds rows after the existing data and writes the header only once, so a
+scheduled or repeated capture keeps accumulating instead of discarding earlier
+rows. `stream` additionally reports its path after the first saved tick.
 
 ## Errors and exit codes
 

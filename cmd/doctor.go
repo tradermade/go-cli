@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -29,7 +28,7 @@ var doctorCmd = &cobra.Command{
 	Long: `Runs four independent checks and reports each:
 
   key      is an API key configured, and where does it come from
-  rest     can the REST API be reached, does the key work there, how fast
+  rest     can the REST API be reached, and does the key work there
   stream   can the WebSocket be reached, does the key work there, plan limits
   config   is the config file present and valid
 
@@ -59,11 +58,10 @@ Probe construction:
 			checks = append(checks, check{"rest", false, "skipped - no key"})
 		} else {
 			checks = append(checks, check{"rest-key", true, fmt.Sprintf("%s (from %s)", config.MaskKey(restKey), restSource)})
-			start := time.Now()
 			if _, err := api.New(restKey).Live(ctx, []string{"EURUSD"}); err != nil {
 				checks = append(checks, check{"rest", false, oneLine(err.Error())})
 			} else {
-				checks = append(checks, check{"rest", true, fmt.Sprintf("live quote in %dms", time.Since(start).Milliseconds())})
+				checks = append(checks, check{"rest", true, "live quote ok"})
 			}
 		}
 
@@ -74,11 +72,11 @@ Probe construction:
 			checks = append(checks, check{"stream", false, "skipped - no key"})
 		} else {
 			checks = append(checks, check{"ws-key", true, fmt.Sprintf("%s (from %s)", config.MaskKey(wsKey), wsSource)})
-			plan, took, err := stream.Probe(ctx, "", wsKey)
+			plan, _, err := stream.Probe(ctx, "", wsKey)
 			if err != nil {
 				checks = append(checks, check{"stream", false, oneLine(err.Error())})
 			} else {
-				detail := fmt.Sprintf("login in %dms - plan allows %d symbols", took.Milliseconds(), plan.SymbolLimit)
+				detail := fmt.Sprintf("login ok - plan allows %d symbols", plan.SymbolLimit)
 				if plan.CFDs {
 					detail += ", CFDs enabled"
 				}

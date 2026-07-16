@@ -32,7 +32,9 @@ API query construction:
 
 --output json prints the JSON response exactly as the server sent it.
 --save requires a .csv filename. A bare filename is created in the current
-working directory; a path is accepted when it includes the filename.`,
+working directory; a path is accepted when it includes the filename. Saving
+appends: re-running with the same filename adds rows and keeps earlier data,
+writing the header only once.`,
 	Example: `  tradermade historical EURUSD --date 2026-07-01
   tradermade historical EURUSD GBPUSD --date yesterday
   tradermade historical EURUSD --output json
@@ -123,6 +125,6 @@ func init() {
 	historicalCmd.Flags().StringVar(&historicalDate, "date", "yesterday",
 		"date: 2006-01-02, today, or yesterday")
 	historicalCmd.Flags().StringVar(&historicalSave, "save", "",
-		"write CSV to a .csv filename (overwrites)")
+		"write CSV to a .csv filename (appends; header written once)")
 	rootCmd.AddCommand(historicalCmd)
 }
