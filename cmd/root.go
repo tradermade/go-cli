@@ -37,9 +37,9 @@ from the TraderMade API (https://tradermade.com), in your terminal.
 
 Get started:
   tradermade config set-key --rest YOUR_REST_KEY --ws YOUR_WS_KEY
-  tradermade quote EURUSD GBPUSD
-  tradermade convert 1000 USD INR
   tradermade live EURUSD GBPUSD
+  tradermade convert 1000 USD INR
+  tradermade stream EURUSD GBPUSD
 
 API keys from https://tradermade.com/signup are required. Environment
 variables override saved keys: TRADERMADE_REST_API_KEY and
@@ -67,7 +67,7 @@ func init() {
 		&cobra.Group{ID: "local", Title: "Local commands (no endpoint):"},
 	)
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", string(output.Table),
-		"select json or csv; live also supports raw (omit for table)")
+		"select json or csv; stream also supports raw (omit for table)")
 	rootCmd.PersistentFlags().Bool("help", false, "show help for this command")
 	rootCmd.PersistentFlags().BoolFuncP("short-help-disabled", "h", "", func(string) error {
 		return fmt.Errorf("-h is not supported; use --help")

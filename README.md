@@ -29,34 +29,23 @@ tradermade 0.1.0-dev
 commit abc1234, built 2026-07-08, go1.24.0 windows/amd64
 ```
 
-## 2. Configure API keys
+## 2. Configure the REST API key
 
-Create keys from [tradermade.com/signup](https://tradermade.com/signup).
-REST commands use a REST key; `live` and `board` use a WebSocket key.
+Create a REST key from [tradermade.com/signup](https://tradermade.com/signup),
+then save it locally:
 
 ```bash
 tradermade config set-key --rest YOUR_REST_KEY
-tradermade config set-key --ws YOUR_WEBSOCKET_KEY
 ```
 
-You can save both together:
+For CI or automation, set `TRADERMADE_REST_API_KEY` instead. Environment
+variables override saved keys.
 
-```bash
-tradermade config set-key --rest YOUR_REST_KEY --ws YOUR_WEBSOCKET_KEY
-```
-
-Environment variables override saved keys:
-
-- `TRADERMADE_REST_API_KEY`
-- `TRADERMADE_WS_API_KEY`
-- `TRADERMADE_API_KEY` as a fallback for both
-
-Check the active configuration and connectivity:
+Check which REST key is active and where it came from:
 
 ```console
 $ tradermade config show
 rest    abcd********wxyz  (from config.json (rest_key))
-stream  wsab********wxyz  (from config.json (ws_key))
 ```
 
 ## 3. Help
@@ -69,12 +58,12 @@ REST API:
   candle      One candle (REST /api/v1/minute_historical or /api/v1/hour_historical)
   convert     Currency conversion (REST /api/v1/convert)
   historical  Daily OHLC (REST /api/v1/historical)
-  quote       Live quotes (REST /api/v1/live)
+  live        Live rates (REST /api/v1/live)
   symbols     Codes (REST /api/v1/live_currencies_list or /api/v1/live_crypto_list)
   timeseries  OHLC candle ranges (REST /api/v1/timeseries)
 
 WebSocket API:
-  live        Live ticks (WebSocket wss://stream.tradermade.com/feedAdv)
+  stream      Live ticks (WebSocket wss://stream.tradermade.com/feedAdv)
 
 REST + WebSocket:
   board       Dashboard (WebSocket /feedAdv; REST /historical and /live)
@@ -86,7 +75,7 @@ including arguments, API parameters, valid values, limits, flags, and examples:
 
 ```bash
 tradermade timeseries --help
-tradermade live --help
+tradermade stream --help
 tradermade historical --help
 ```
 
@@ -94,70 +83,58 @@ Only the long `--help` form is supported. The `tradermade help` command and
 `-h` shorthand are intentionally unavailable. The exhaustive command catalog
 is in [cmds.md](cmds.md).
 
-## 4. REST endpoints
+## 4. Live REST rates
 
 Table output is the default. Do not pass `--output table`.
 
-### Live quotes - `/api/v1/live`
+Command: `live`
+
+Endpoint: `GET /api/v1/live`
+
+Request:
 
 ```console
-$ tradermade quote EURUSD GBPUSD
+$ tradermade live EURUSD
+```
+
+Response:
+
+```text
 SYMBOL  BID      ASK      MID
-EURUSD  1.14105  1.14113  1.14109
-GBPUSD  1.33489  1.33501  1.33495
+EURUSD  1.14361  1.14367  1.14364
 
-as of 2026-07-08 10:29:11 UTC
+as of 2026-07-15 14:58:35 UTC
 ```
 
-The timestamp is the server quote timestamp, not local request time.
-Use `--save quote.csv` to save the snapshot as CSV.
+Save the same response as CSV by adding a filename:
 
-### Convert - `/api/v1/convert`
-
-```console
-$ tradermade convert 1000 USD INR
-1000 USD = 85812.5 INR
-rate  1 USD = 85.8125 INR
-as of 2026-07-08 10:29:11 UTC
+```bash
+tradermade live EURUSD --save eurusd-live.csv
 ```
 
-Arguments map to the API's `amount`, `from`, and `to` parameters.
+The CLI saves a bare filename in the current working directory and reports its
+absolute path. If `eurusd-live.csv` already exists, its previous contents are
+replaced.
 
-### Symbol lists - `/api/v1/live_currencies_list`
+## 5. Timeseries OHLC
 
-```console
-$ tradermade symbols
-AED  UAE Dirham
-ARS  Argentine Peso
-AUD  Australian Dollar
-...
+Command: `timeseries`
 
-54 codes
-```
+Endpoint: `GET /api/v1/timeseries`
 
-Use `--market crypto` to select `/api/v1/live_crypto_list`. The complete list
-from the selected endpoint is returned.
-
-### Historical daily OHLC - `/api/v1/historical`
-
-```console
-$ tradermade historical EURUSD --date 2026-07-01
-SYMBOL  OPEN     HIGH     LOW      CLOSE
-EURUSD  1.17263  1.18094  1.16836  1.17951
-
-daily candle for 2026-07-01
-```
-
-`--date` accepts `YYYY-MM-DD`, `today`, or `yesterday` (the default).
-
-### Timeseries OHLC - `/api/v1/timeseries`
+Request:
 
 ```console
 $ tradermade timeseries EURUSD --start 2026-07-01 --end 2026-07-03
+```
+
+Response:
+
+```text
 DATE        OPEN     HIGH     LOW      CLOSE
-2026-07-01  1.17263  1.18094  1.16836  1.17951
-2026-07-02  1.17951  1.18291  1.17542  1.18017
-2026-07-03  1.18017  1.18135  1.17268  1.17443
+2026-07-01  1.14225  1.1423   1.13618  1.13785
+2026-07-02  1.13785  1.14728  1.1375   1.14342
+2026-07-03  1.14341  1.14622  1.14206  1.14382
 
 EURUSD daily candles, 3 rows
 ```
@@ -166,34 +143,60 @@ The command supports daily, hourly, and minute intervals. Run
 `tradermade timeseries --help` for `start_date`, `end_date`, `interval`, `period`,
 `weekend`, relative `--last` ranges, and per-request limits.
 
-### Exact minute/hour candle - `/api/v1/minute_historical`
+Save the returned candles as CSV:
 
-```console
-$ tradermade candle EURUSD --at 2026-07-07-14:30
-SYMBOL  TIME              OPEN     HIGH     LOW      CLOSE
-EURUSD  2026-07-07-14:30  1.17182  1.17204  1.17161  1.17193
+```bash
+tradermade timeseries EURUSD --start 2026-07-01 --end 2026-07-03 --save eurusd-timeseries.csv
 ```
 
-Add `--hour` to use `/api/v1/hour_historical` instead. `--at` uses
-`YYYY-MM-DD-HH:MM`.
+If the file already exists, the REST save replaces its previous contents.
 
-## 5. WebSocket endpoint
+## 6. Configure the WebSocket API key
 
-### Live streaming - `wss://stream.tradermade.com/feedAdv`
+Save the WebSocket streaming key before using `stream` or `board`:
+
+```bash
+tradermade config set-key --ws YOUR_WEBSOCKET_KEY
+```
+
+For CI or automation, set `TRADERMADE_WS_API_KEY` instead.
+
+## 7. WebSocket stream
+
+Command: `stream`
+
+Endpoint: `wss://stream.tradermade.com/feedAdv`
+
+Request:
 
 ```console
-$ tradermade live EURUSD
-TIME                    SYMBOL                BID            ASK    BID-VOL    ASK-VOL
-20260708-10:29:11.104   EURUSD            1.14105        1.14113      100000      100000
-20260708-10:29:11.337   EURUSD            1.14106        1.14114      200000      100000
+$ tradermade stream EURUSD
+```
+
+Response:
+
+```text
+connected - plan allows 5000 simultaneous symbols
+subscribed: EURUSD:QUOTE
+TIME                   SYMBOL                BID            ASK    BID-VOL    ASK-VOL
+20260715-14:59:12.238  EURUSD        1.143490000    1.143540000    3000000    1000000
 ```
 
 Stop with Ctrl+C. The client logs in with `fmt=JSON`, reconnects with backoff,
 and resubscribes automatically. `--send-last` requests a cached `LAST_QUOTE`;
 `--ladder` requests depth for plans with trader-ladder access. See
-`tradermade live --help` for the exact login and subscription messages.
+`tradermade stream --help` for the exact login and subscription messages.
 
-## 6. Commands using REST and WebSocket
+Save ticks while keeping the terminal stream visible:
+
+```bash
+tradermade stream EURUSD --save ticks.csv
+```
+
+WebSocket saving appends. If `ticks.csv` already exists, new ticks are added
+after its existing rows and the CSV header is not written again.
+
+## 9. Commands using REST and WebSocket
 
 ### Board
 
@@ -233,26 +236,26 @@ capabilities, and config-file validity. It exits nonzero if a check fails.
 No output flag means table output. Explicit `--output table` is rejected.
 
 - `--output json`: exact TraderMade response body for REST commands; original
-  market tick frames for `live`.
+  market tick frames for `stream`.
 - `--output csv`: CLI-generated CSV with a header row.
-- `--output raw`: `live` only; includes greetings and WebSocket control frames.
+- `--output raw`: `stream` only; includes greetings and WebSocket control frames.
 
 ## Saving CSV files
 
-`quote`, `historical`, `timeseries`, and `live` require `--save` to include a
+`live`, `historical`, `timeseries`, and `stream` require `--save` to include a
 `.csv` filename:
 
 ```bash
-tradermade quote UK100 --save quote.csv
+tradermade live UK100 --save rates.csv
 tradermade historical EURUSD --save historical.csv
 tradermade timeseries EURUSD --last 30d --save "C:\data\market exports\timeseries.csv"
-tradermade live EURUSD --save ticks.csv
+tradermade stream EURUSD --save ticks.csv
 ```
 
 Bare filenames are saved in the current working directory, and the absolute
 location is reported. A complete path is also accepted when it includes the
 filename, such as `C:\Users\Omkar\Downloads\file.csv`. Directory-only targets
-are rejected. REST saves overwrite; live appends and reports its path after the
+are rejected. REST saves overwrite; stream appends and reports its path after the
 first saved tick.
 
 ## Errors and exit codes

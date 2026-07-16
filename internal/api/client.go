@@ -208,7 +208,7 @@ func (c *Client) getBody(ctx context.Context, path string, params url.Values) ([
 		// key hitting REST typically fails with 401 or 500.
 		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode >= 500) &&
 			strings.HasPrefix(strings.ToLower(c.APIKey), "ws") {
-			msg += `` + "\nnote: your key starts with \"ws\" - that is usually a WebSocket streaming key; REST endpoints (quote, convert, historical...) need a REST API key"
+			msg += `` + "\nnote: your key starts with \"ws\" - that is usually a WebSocket streaming key; REST endpoints (live, convert, historical...) need a REST API key"
 		}
 		return nil, &APIError{StatusCode: resp.StatusCode, Message: msg}
 	}

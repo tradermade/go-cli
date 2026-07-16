@@ -81,7 +81,7 @@ func ResolveRESTKey() (string, error) {
 	return key, err
 }
 
-// ResolveWSKey returns the key streaming commands (live, board) should use.
+// ResolveWSKey returns the key streaming commands (stream, board) should use.
 func ResolveWSKey() (string, error) {
 	key, _, err := resolveScoped(EnvWSKey, func(c Config) string { return c.WSKey }, "WebSocket", "--ws")
 	return key, err

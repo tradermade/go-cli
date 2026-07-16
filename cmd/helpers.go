@@ -145,7 +145,7 @@ func saveCSV(path string, header []string, rows [][]string) error {
 	return werr
 }
 
-// openCSVAppend opens path for appending CSV rows (used by live capture -
+// openCSVAppend opens path for appending CSV rows (used by stream capture -
 // restarting a capture continues the file rather than wiping it). Reports
 // whether the file is new/empty so the caller writes the header only once.
 func openCSVAppend(path string) (f *os.File, w *csv.Writer, needHeader bool, err error) {

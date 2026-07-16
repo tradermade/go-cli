@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestEndpointHelpDocumentsAllParameters(t *testing.T) {
@@ -12,13 +14,13 @@ func TestEndpointHelpDocumentsAllParameters(t *testing.T) {
 		text string
 		want []string
 	}{
-		{"quote", quoteCmd.Long, []string{"currency", "api_key", "--output json", "--save"}},
+		{"live", restLiveCmd.Long, []string{"currency", "api_key", "--output json", "--save"}},
 		{"convert", convertCmd.Long, []string{"amount", "from", "to", "api_key"}},
 		{"historical", historicalCmd.Long, []string{"currency", "date", "api_key", "--save"}},
 		{"timeseries", timeseriesCmd.Long, []string{"start_date", "end_date", "interval", "period", "format", "weekend", "api_key"}},
 		{"candle", candleCmd.Long, []string{"currency", "date_time", "api_key", "--hour"}},
 		{"symbols", symbolsCmd.Long, []string{"live_currencies_list", "live_crypto_list", "api_key"}},
-		{"live", liveCmd.Long, []string{"login.key", "login.fmt", "login.send_ladder", "subscribe.symbols", "subscribe.send_last"}},
+		{"stream", streamCmd.Long, []string{"login.key", "login.fmt", "login.send_ladder", "subscribe.symbols", "subscribe.send_last"}},
 		{"board", boardCmd.Long, []string{"WebSocket /feedAdv", "REST /historical", "REST /live"}},
 		{"doctor", doctorCmd.Long, []string{"REST /api/v1/live", "WebSocket /feedAdv"}},
 	}
@@ -30,6 +32,22 @@ func TestEndpointHelpDocumentsAllParameters(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPublicLiveCommandNames(t *testing.T) {
+	commands := make(map[string]*cobra.Command)
+	for _, command := range rootCmd.Commands() {
+		commands[command.Name()] = command
+	}
+	if commands["live"] != restLiveCmd {
+		t.Fatal("live is not registered as the REST /api/v1/live command")
+	}
+	if commands["stream"] != streamCmd {
+		t.Fatal("stream is not registered as the WebSocket command")
+	}
+	if _, exists := commands["quote"]; exists {
+		t.Fatal("removed quote command is still registered")
 	}
 }
 

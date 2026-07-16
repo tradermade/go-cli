@@ -10,11 +10,11 @@ import (
 	"github.com/tradermade/go-cli/internal/output"
 )
 
-var quoteSave string
+var restLiveSave string
 
-var quoteCmd = &cobra.Command{
-	Use:     "quote SYMBOL [SYMBOL...]",
-	Short:   "Live quotes (REST /api/v1/live)",
+var restLiveCmd = &cobra.Command{
+	Use:     "live SYMBOL [SYMBOL...]",
+	Short:   "Live rates (REST /api/v1/live)",
 	GroupID: "rest",
 	Long: `Get live bid, ask, and mid prices from:
   GET https://marketdata.tradermade.com/api/v1/live
@@ -28,14 +28,14 @@ Symbols are uppercased. Forex, crypto pairs, and enabled CFD instruments are
 accepted. --output json prints the JSON response exactly as the server sent it.
 --save requires a .csv filename. A bare filename is created in the current
 working directory; a path is accepted when it includes the filename.`,
-	Example: `  tradermade quote EURUSD
-  tradermade quote EURUSD GBPUSD XAUUSD
-  tradermade quote BTCUSD --output json`,
+	Example: `  tradermade live EURUSD
+  tradermade live EURUSD GBPUSD XAUUSD
+  tradermade live BTCUSD --output json`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
-		if quoteSave != "" {
-			quoteSave, err = resolveSavePath(quoteSave)
+		if restLiveSave != "" {
+			restLiveSave, err = resolveSavePath(restLiveSave)
 			if err != nil {
 				return err
 			}
@@ -56,7 +56,7 @@ working directory; a path is accepted when it includes the filename.`,
 			if err := printServerBody(body); err != nil {
 				return err
 			}
-			if quoteSave == "" {
+			if restLiveSave == "" {
 				return nil
 			}
 			resp = &api.LiveResponse{}
@@ -78,11 +78,11 @@ working directory; a path is accepted when it includes the filename.`,
 				serverTime(resp.Timestamp, resp.RequestedTime)})
 		}
 
-		if quoteSave != "" {
-			if err := saveCSV(quoteSave, header, rows); err != nil {
+		if restLiveSave != "" {
+			if err := saveCSV(restLiveSave, header, rows); err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "saved %d rows to %s\n", len(rows), quoteSave)
+			fmt.Fprintf(os.Stderr, "saved %d rows to %s\n", len(rows), restLiveSave)
 			if wireJSON {
 				return nil
 			}
@@ -108,7 +108,7 @@ working directory; a path is accepted when it includes the filename.`,
 }
 
 func init() {
-	quoteCmd.Flags().StringVar(&quoteSave, "save", "",
+	restLiveCmd.Flags().StringVar(&restLiveSave, "save", "",
 		"write CSV to a .csv filename (overwrites)")
-	rootCmd.AddCommand(quoteCmd)
+	rootCmd.AddCommand(restLiveCmd)
 }

@@ -16,14 +16,14 @@ import (
 )
 
 var (
-	liveLadder   bool
-	liveSendLast bool
-	liveRaw      bool
-	liveSave     string
+	streamLadder   bool
+	streamSendLast bool
+	streamRaw      bool
+	streamSave     string
 )
 
-var liveCmd = &cobra.Command{
-	Use:     "live SYMBOL [SYMBOL...]",
+var streamCmd = &cobra.Command{
+	Use:     "stream SYMBOL [SYMBOL...]",
 	Short:   "Live ticks (WebSocket wss://stream.tradermade.com/feedAdv)",
 	GroupID: "websocket",
 	Long: `Stream ticks from wss://stream.tradermade.com/feedAdv (WebSocket v2).
@@ -46,12 +46,12 @@ The client reconnects with backoff and resubscribes because subscriptions do
 not persist. --save requires a .csv filename and appends on restart. A bare
 filename uses the current working directory; the absolute path is reported
 when the first tick is saved. Press Ctrl+C to stop.`,
-	Example: `  tradermade live EURUSD
-  tradermade live EURUSD GBPUSD XAUUSD
-  tradermade live EURUSD --ladder
-  tradermade live EURUSD --output raw
-  tradermade live EURUSD --save ticks.csv
-  tradermade live BTCUSD --output json > ticks.ndjson`,
+	Example: `  tradermade stream EURUSD
+  tradermade stream EURUSD GBPUSD XAUUSD
+  tradermade stream EURUSD --ladder
+  tradermade stream EURUSD --output raw
+  tradermade stream EURUSD --save ticks.csv
+  tradermade stream BTCUSD --output json > ticks.ndjson`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(cmd.Context())
@@ -60,7 +60,7 @@ when the first tick is saved. Press Ctrl+C to stop.`,
 		if err != nil {
 			return err
 		}
-		rawOutput, err := rawOutput(cmd, format, liveRaw)
+		rawOutput, err := rawOutput(cmd, format, streamRaw)
 		if err != nil {
 			return err
 		}
@@ -74,12 +74,12 @@ when the first tick is saved. Press Ctrl+C to stop.`,
 		var csvW *csv.Writer
 		saved := 0
 		var saveErr error
-		if liveSave != "" {
-			liveSave, err = resolveSavePath(liveSave)
+		if streamSave != "" {
+			streamSave, err = resolveSavePath(streamSave)
 			if err != nil {
 				return err
 			}
-			f, w, needHeader, err := openCSVAppend(liveSave)
+			f, w, needHeader, err := openCSVAppend(streamSave)
 			if err != nil {
 				return err
 			}
@@ -103,8 +103,8 @@ when the first tick is saved. Press Ctrl+C to stop.`,
 		opts := stream.Options{
 			Key:        key,
 			Symbols:    args,
-			SendLadder: liveLadder,
-			SendLast:   liveSendLast,
+			SendLadder: streamLadder,
+			SendLast:   streamSendLast,
 			// Lifecycle messages go to stderr so stdout stays clean for piping.
 			Logf: func(f string, a ...any) {
 				fmt.Fprintf(os.Stderr, f+"\n", a...)
@@ -112,19 +112,19 @@ when the first tick is saved. Press Ctrl+C to stop.`,
 			OnTick: func(t stream.Tick, raw []byte) {
 				if csvW != nil && saveErr == nil {
 					if err := csvW.Write([]string{t.Timestamp, t.Symbol, t.Bid, t.Ask, t.BidVolume, t.AskVolume}); err != nil {
-						saveErr = fmt.Errorf("cannot save CSV to %s: %w", liveSave, err)
+						saveErr = fmt.Errorf("cannot save CSV to %s: %w", streamSave, err)
 						cancel()
 						return
 					}
 					csvW.Flush()
 					if err := csvW.Error(); err != nil {
-						saveErr = fmt.Errorf("cannot save CSV to %s: %w", liveSave, err)
+						saveErr = fmt.Errorf("cannot save CSV to %s: %w", streamSave, err)
 						cancel()
 						return
 					}
 					saved++
 					if saved == 1 {
-						fmt.Fprintf(os.Stderr, "saving CSV to %s\n", liveSave)
+						fmt.Fprintf(os.Stderr, "saving CSV to %s\n", streamSave)
 					}
 				}
 				if rawOutput {
@@ -195,8 +195,8 @@ when the first tick is saved. Press Ctrl+C to stop.`,
 		if saveErr != nil {
 			return saveErr
 		}
-		if liveSave != "" {
-			fmt.Fprintf(os.Stderr, "saved %d ticks to %s\n", saved, liveSave)
+		if streamSave != "" {
+			fmt.Fprintf(os.Stderr, "saved %d ticks to %s\n", saved, streamSave)
 		}
 		fmt.Fprintln(os.Stderr, "stopped")
 		return nil
@@ -232,14 +232,14 @@ func shortNum(s string) string {
 }
 
 func init() {
-	liveCmd.Flags().BoolVar(&liveLadder, "ladder", false,
+	streamCmd.Flags().BoolVar(&streamLadder, "ladder", false,
 		"request market depth (trader ladder plans only)")
-	liveCmd.Flags().BoolVar(&liveSendLast, "send-last", false,
+	streamCmd.Flags().BoolVar(&streamSendLast, "send-last", false,
 		"receive the cached last tick immediately on subscribe")
-	liveCmd.Flags().BoolVar(&liveRaw, "raw", false,
+	streamCmd.Flags().BoolVar(&streamRaw, "raw", false,
 		"deprecated alias for --output raw")
-	_ = liveCmd.Flags().MarkDeprecated("raw", "use --output raw instead")
-	liveCmd.Flags().StringVar(&liveSave, "save", "",
+	_ = streamCmd.Flags().MarkDeprecated("raw", "use --output raw instead")
+	streamCmd.Flags().StringVar(&streamSave, "save", "",
 		"append CSV to a .csv filename")
-	rootCmd.AddCommand(liveCmd)
+	rootCmd.AddCommand(streamCmd)
 }
